@@ -5,7 +5,9 @@ import HomeScreen from "../screens/HomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import MapScreen from "../screens/MapScreen";
 import RegisterScreen from "../screens/RegisterScreen";
+import RestaurantScreen from "../screens/RestaurantScreen";
 import { auth } from "../services/firebase";
+
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +31,7 @@ export default function AppNavigator() {
                 <>
                     <Stack.Screen name="Home" component={HomeScreen} />
                     <Stack.Screen name="Map" component={MapScreen} />
+                    <Stack.Screen name="Restaurant" component={RestaurantScreen} />
                 </>
             ) : (
                 <>

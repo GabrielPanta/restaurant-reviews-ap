@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { GOOGLE_PLACES_KEY } from "../config/maps";
 
-export default function MapScreen() {
+export default function MapScreen({ navigation }) {
   const [location, setLocation] = useState(null);
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,17 +82,18 @@ export default function MapScreen() {
         title="Estás aquí"
       />
 
-      {places.map((p) => (
-        <Marker
-          key={p.place_id}
-          coordinate={{
-            latitude: p.geometry.location.lat,
-            longitude: p.geometry.location.lng
-          }}
-          title={p.name}
-          description={p.vicinity}
-        />
-      ))}
+          {places.map((p) => (
+              <Marker
+                  key={p.place_id}
+                  coordinate={{
+                      latitude: p.geometry.location.lat,
+                      longitude: p.geometry.location.lng
+                  }}
+                  title={p.name}
+                  description={p.vicinity}
+                  onPress={() => navigation.navigate("Restaurant", { place: p })}
+              />
+        ))}
     </MapView>
   );
 }
