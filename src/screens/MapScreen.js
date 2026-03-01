@@ -1,110 +1,136 @@
 import * as Location from "expo-location";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
-import { GOOGLE_PLACES_KEY } from "../config/maps";
+import { useEffect, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    View
+} from "react-native";
+import MapView, { Callout, Marker } from "react-native-maps";
+
+const GOOGLE_API_KEY = "AIzaSyDjgLXJBed2-NrpEcmWXKX_uhmmT8pdASQ";
 
 export default function MapScreen({ navigation }) {
-  const [location, setLocation] = useState(null);
+  const mapRef = useRef(null);
+
+  const [region, setRegion] = useState(null);
   const [places, setPlaces] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    init();
+    loadLocation();
   }, []);
 
-  const init = async () => {
+  const loadLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return;
+
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High
+    });
+
+    const coords = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01
+    };
+
+    setRegion(coords);
+
+    if (mapRef.current) {
+      mapRef.current.animateToRegion(coords, 1000);
+    }
+
+    loadNearbyRestaurants(coords.latitude, coords.longitude);
+  };
+
+  const loadNearbyRestaurants = async (lat, lng) => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setLoading(false);
-        return;
-      }
+      const url =
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+        `?location=${lat},${lng}` +
+        `&radius=1000` +
+        `&type=restaurant` +
+        `&key=${GOOGLE_API_KEY}`;
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
+      const res = await fetch(url);
+      const json = await res.json();
 
-      await fetchRestaurants(loc.coords);
-
-      setLoading(false);
+      setPlaces(json.results || []);
     } catch (e) {
-      setLoading(false);
+      console.log("Error cargando restaurantes", e);
     }
   };
 
-  const fetchRestaurants = async (coords) => {
-    const url =
-      "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
-      `location=${coords.latitude},${coords.longitude}` +
-      "&radius=1500&type=restaurant&key=" +
-      GOOGLE_PLACES_KEY;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results) {
-      setPlaces(data.results);
-    }
-  };
-
-  if (loading) {
+  if (!region) {
     return (
-      <View style={styles.center}>
+      <View style={styles.loading}>
         <ActivityIndicator size="large" color="#22c55e" />
-        <Text style={styles.text}>Buscando restaurantes...</Text>
-      </View>
-    );
-  }
-
-  if (!location) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.text}>No se pudo obtener ubicación</Text>
       </View>
     );
   }
 
   return (
     <MapView
+      ref={mapRef}
       style={styles.map}
-      initialRegion={{
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02
-      }}
+      initialRegion={region}
+      showsUserLocation
     >
-      <Marker
-        coordinate={{
-          latitude: location.latitude,
-          longitude: location.longitude
-        }}
-        title="Estás aquí"
-      />
-
-          {places.map((p) => (
-              <Marker
-                  key={p.place_id}
-                  coordinate={{
-                      latitude: p.geometry.location.lat,
-                      longitude: p.geometry.location.lng
-                  }}
-                  title={p.name}
-                  description={p.vicinity}
-                  onPress={() => navigation.navigate("Restaurant", { place: p })}
-              />
-        ))}
+      {places.map(place => (
+        <Marker
+          key={place.place_id}
+          coordinate={{
+            latitude: place.geometry.location.lat,
+            longitude: place.geometry.location.lng
+          }}
+        >
+          <Callout
+            tooltip
+            onPress={() => navigation.navigate("Restaurant", { place })}
+          >
+            <View style={styles.callout}>
+              <Text style={styles.calloutTitle}>{place.name}</Text>
+              <Text style={styles.calloutDesc}>{place.vicinity}</Text>
+              <Text style={styles.calloutAction}>Ver reseñas</Text>
+            </View>
+          </Callout>
+        </Marker>
+      ))}
     </MapView>
   );
 }
 
 const styles = StyleSheet.create({
-  map: { flex: 1 },
-  center: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-    justifyContent: "center",
-    alignItems: "center"
+  map: {
+    flex: 1
   },
-  text: { color: "#fff", marginTop: 10 }
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0f172a"
+  },
+  callout: {
+    width: 220,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    elevation: 4
+  },
+  calloutTitle: {
+    fontWeight: "600",
+    fontSize: 14,
+    color: "#111"
+  },
+  calloutDesc: {
+    fontSize: 12,
+    color: "#555",
+    marginTop: 2
+  },
+  calloutAction: {
+    marginTop: 8,
+    color: "#22c55e",
+    fontWeight: "600"
+  }
 });

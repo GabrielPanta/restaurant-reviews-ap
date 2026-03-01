@@ -1,131 +1,183 @@
-import { signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import * as Location from "expo-location";
+import { useEffect, useState } from "react";
 import {
-    SafeAreaView,
+    FlatList,
+    StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from "react-native";
-import { auth, db } from "../services/firebase";
+
+const GOOGLE_API_KEY = "AIzaSyDjgLXJBed2-NrpEcmWXKX_uhmmT8pdASQ";
 
 export default function HomeScreen({ navigation }) {
-    const [nombre, setNombre] = useState("");
+  const [city, setCity] = useState("Tu ciudad");
+  const [places, setPlaces] = useState([]);
+  const [search, setSearch] = useState("");
 
-    useEffect(() => {
-        const fetchUser = async () => {
-            const uid = auth.currentUser?.uid;
-            if (!uid) return;
-            const snap = await getDoc(doc(db, "usuarios", uid));
-            if (snap.exists()) {
-                setNombre(snap.data().nombre);
-            }
-        };
+  useEffect(() => {
+    loadLocation();
+  }, []);
 
-        fetchUser();
-    }, []);
+  const loadLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return;
 
-    const logout = () => {
-        signOut(auth);
-    };
+    const loc = await Location.getCurrentPositionAsync({});
+    loadNearbyRestaurants(loc.coords.latitude, loc.coords.longitude);
+  };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.greeting}>Hola</Text>
-                <Text style={styles.name}>{nombre}</Text>
-            </View>
-            <View style={styles.card}>
-                <Text style={styles.title}>Explorar restaurantes</Text>
-                <Text style={styles.desc}>
-                    Encuentra restaurantes cercanos y revisa su historial
-                </Text>
+  const loadNearbyRestaurants = async (lat, lng) => {
+    try {
+      const url =
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+        `?location=${lat},${lng}` +
+        `&radius=1500` +
+        `&type=restaurant` +
+        `&key=${GOOGLE_API_KEY}`;
 
-                <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={() => navigation.navigate("Map")}
-                >
-                    <Text style={styles.primaryText}>Abrir mapa</Text>
-                </TouchableOpacity>
-            </View>
+      const res = await fetch(url);
+      const json = await res.json();
 
-            <View style={styles.card}>
-                <Text style={styles.title}>Mis reseñas</Text>
-                <Text style={styles.desc}>
-                    Revisa tus calificaciones y decide si volver
-                </Text>
+      setPlaces(json.results || []);
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
-                <TouchableOpacity style={styles.secondaryButton}>
-                    <Text style={styles.secondaryText}>Ver mis reseñas</Text>
-                </TouchableOpacity>
-            </View>
+  const filtered = places.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
 
-            <TouchableOpacity style={styles.logout} onPress={logout}>
-                <Text style={styles.logoutText}>Cerrar sesión</Text>
-            </TouchableOpacity>
-        </SafeAreaView>
-    );
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate("Restaurant", { place: item })}
+    >
+      <View style={styles.cardContent}>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.address}>{item.vicinity}</Text>
+        <Text style={styles.rating}>⭐ {item.rating || "4.5"}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={styles.header}>
+        <Text style={styles.title}>Restaurantes</Text>
+        <Text style={styles.subtitle}>Cerca de ti</Text>
+      </View>
+
+      <View style={styles.searchBox}>
+        <TextInput
+          placeholder="Buscar restaurantes..."
+          placeholderTextColor="#888"
+          value={search}
+          onChangeText={setSearch}
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={() => navigation.navigate("Map")}
+        >
+          <Text style={styles.mapText}>Ver en mapa</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={item => item.place_id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#0f172a",
-        padding: 20
-    },
-    header: {
-        marginBottom: 20
-    },
-    greeting: {
-        color: "#94a3b8",
-        fontSize: 16
-    },
-    name: {
-        color: "#fff",
-        fontSize: 28
-    },
-    card: {
-        backgroundColor: "#1e293b",
-        borderRadius: 20,
-        padding: 20,
-        marginBottom: 16
-    },
-    title: {
-        color: "#fff",
-        fontSize: 18,
-        marginBottom: 6
-    },
-    desc: {
-        color: "#94a3b8",
-        marginBottom: 14
-    },
-    primaryButton: {
-        backgroundColor: "#22c55e",
-        padding: 14,
-        borderRadius: 12,
-        alignItems: "center"
-    },
-    primaryText: {
-        color: "#fff",
-        fontSize: 15
-    },
-    secondaryButton: {
-        backgroundColor: "#334155",
-        padding: 14,
-        borderRadius: 12,
-        alignItems: "center"
-    },
-    secondaryText: {
-        color: "#fff",
-        fontSize: 15
-    },
-    logout: {
-        marginTop: "auto",
-        alignItems: "center",
-        padding: 16
-    },
-    logoutText: {
-        color: "#f87171"
-    }
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a"
+  },
+
+  header: {
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 10
+  },
+  title: {
+    fontSize: 28,
+    color: "#fff",
+    fontWeight: "700"
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#94a3b8",
+    marginTop: 4
+  },
+
+  searchBox: {
+    paddingHorizontal: 20,
+    marginTop: 10
+  },
+  input: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    padding: 14,
+    color: "#fff",
+    fontSize: 14
+  },
+
+  actions: {
+    paddingHorizontal: 20,
+    marginTop: 14
+  },
+  mapButton: {
+    backgroundColor: "#22c55e",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center"
+  },
+  mapText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14
+  },
+
+  list: {
+    padding: 20,
+    paddingBottom: 40
+  },
+  card: {
+    backgroundColor: "#1e293b",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12
+  },
+  cardContent: {},
+
+  name: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600"
+  },
+  address: {
+    color: "#94a3b8",
+    fontSize: 13,
+    marginTop: 4
+  },
+  rating: {
+    color: "#22c55e",
+    marginTop: 6,
+    fontWeight: "600"
+  }
 });
