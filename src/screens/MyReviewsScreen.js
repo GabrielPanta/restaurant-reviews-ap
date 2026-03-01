@@ -1,3 +1,4 @@
+import { signOut } from "firebase/auth";
 import {
     collection,
     getDocs,
@@ -7,8 +8,10 @@ import {
 import { useEffect, useState } from "react";
 import {
     FlatList,
+    SafeAreaView,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View
 } from "react-native";
 import { auth, db } from "../services/firebase";
@@ -36,8 +39,10 @@ export default function MyReviewsScreen() {
         const data = doc.data();
 
         let date = "Sin fecha";
-        if (data.createdAt?.toDate) {
-          date = data.createdAt.toDate().toLocaleDateString();
+        if (data.createdAt && data.createdAt.toDate) {
+          date = data.createdAt
+            .toDate()
+            .toLocaleDateString();
         }
 
         return {
@@ -53,50 +58,90 @@ export default function MyReviewsScreen() {
       });
 
       setReviews(list);
-
     } catch (e) {
       console.log("Error cargando mis reseñas:", e);
     }
   };
 
-    const renderItem = ({ item }) => (
-        <View style={styles.card}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.rating}>⭐ {item.rating}</Text>
-            <Text style={styles.date}>{item.date}</Text>
-            {item.comment ? (
-                <Text style={styles.comment}>{item.comment}</Text>
-            ) : null}
-        </View>
-    );
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.log("Error cerrando sesión", e);
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <View style={styles.card}>
+      <Text style={styles.name}>{item.name}</Text>
+      <Text style={styles.rating}>⭐ {item.rating}</Text>
+      <Text style={styles.date}>{item.date}</Text>
+      {item.comment ? (
+        <Text style={styles.comment}>{item.comment}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Mis reseñas</Text>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
 
-      {reviews.length === 0 ? (
-        <Text style={styles.empty}>Aún no tienes reseñas</Text>
-      ) : (
-        <FlatList
-          data={reviews}
-          keyExtractor={item => item.id}
-          renderItem={renderItem}
-        />
-      )}
-    </View>
+        <View style={styles.header}>
+          <Text style={styles.title}>Mis reseñas</Text>
+
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutText}>Cerrar Sesión</Text>
+          </TouchableOpacity>
+        </View>
+
+        {reviews.length === 0 ? (
+          <Text style={styles.empty}>
+            Aún no tienes reseñas
+          </Text>
+        ) : (
+          <FlatList
+            data={reviews}
+            keyExtractor={item => item.id}
+            renderItem={renderItem}
+          />
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#0f172a"
+  },
   container: {
     flex: 1,
-    backgroundColor: "#0f172a",
     padding: 16
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12
   },
   title: {
     color: "#fff",
-    fontSize: 20,
-    marginBottom: 12
+    fontSize: 22
+  },
+  logoutBtn: {
+    backgroundColor: "#ef4444",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8
+  },
+  logoutText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600"
   },
   empty: {
     color: "#94a3b8"
@@ -115,13 +160,13 @@ const styles = StyleSheet.create({
     color: "#22c55e",
     marginTop: 4
   },
-  comment: {
-    color: "#e2e8f0",
-    marginTop: 4
-  },
   date: {
     color: "#64748b",
     marginTop: 4,
     fontSize: 12
+  },
+  comment: {
+    color: "#e2e8f0",
+    marginTop: 4
   }
 });

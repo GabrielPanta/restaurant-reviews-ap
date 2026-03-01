@@ -1,5 +1,5 @@
 import { signInWithEmailAndPassword } from "firebase/auth";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
     KeyboardAvoidingView,
     Platform,
@@ -31,7 +31,7 @@ export default function LoginScreen({ navigation }) {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
             <View style={styles.card}>
-                <Text style={styles.title}>Restaurant Reviews</Text>
+                <Text style={styles.title}>Restaurantes Ranking</Text>
                 <Text style={styles.subtitle}>
                     Descubre si vale la pena volver a un restaurante
                 </Text>
