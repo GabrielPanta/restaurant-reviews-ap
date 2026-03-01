@@ -1,11 +1,11 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
-import { auth } from "../services/firebase";
-
 import HomeScreen from "../screens/HomeScreen";
 import LoginScreen from "../screens/LoginScreen";
+import MapScreen from "../screens/MapScreen";
 import RegisterScreen from "../screens/RegisterScreen";
+import { auth } from "../services/firebase";
 
 const Stack = createNativeStackNavigator();
 
@@ -26,7 +26,10 @@ export default function AppNavigator() {
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             {user ? (
-                <Stack.Screen name="Home" component={HomeScreen} />
+                <>
+                    <Stack.Screen name="Home" component={HomeScreen} />
+                    <Stack.Screen name="Map" component={MapScreen} />
+                </>
             ) : (
                 <>
                     <Stack.Screen name="Login" component={LoginScreen} />

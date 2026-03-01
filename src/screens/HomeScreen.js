@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { auth, db } from "../services/firebase";
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
     const [nombre, setNombre] = useState("");
 
     useEffect(() => {
@@ -42,7 +42,10 @@ export default function HomeScreen() {
                     Encuentra restaurantes cercanos y revisa su historial
                 </Text>
 
-                <TouchableOpacity style={styles.primaryButton}>
+                <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={() => navigation.navigate("Map")}
+                >
                     <Text style={styles.primaryText}>Abrir mapa</Text>
                 </TouchableOpacity>
             </View>
