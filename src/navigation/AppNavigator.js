@@ -6,6 +6,8 @@ import RegisterScreen from "../screens/RegisterScreen";
 import RestaurantScreen from "../screens/RestaurantScreen";
 import { auth } from "../services/firebase";
 import MainTabs from "./MainTabs";
+import HomeScreen from "../screens/HomeScreen";
+import MapScreen from "../screens/MapScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -33,6 +35,8 @@ export default function AppNavigator() {
             component={RestaurantScreen}
             options={{ headerShown: true, title: "Restaurante" }}
           />
+          <Stack.Screen name="Map" component={MapScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} />
         </>
       ) : (
         <>

@@ -7,7 +7,6 @@ import {
     View
 } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
-
 const GOOGLE_API_KEY = "AIzaSyDjgLXJBed2-NrpEcmWXKX_uhmmT8pdASQ";
 
 export default function MapScreen({ navigation }) {

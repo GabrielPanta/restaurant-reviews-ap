@@ -93,7 +93,7 @@ export default function MyReviewsScreen() {
             style={styles.logoutBtn}
             onPress={handleLogout}
           >
-            <Text style={styles.logoutText}>Cerrar Sesión</Text>
+            <Text style={styles.logoutText}>Salir</Text>
           </TouchableOpacity>
         </View>
 
