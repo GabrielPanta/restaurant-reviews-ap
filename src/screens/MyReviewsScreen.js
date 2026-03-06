@@ -8,7 +8,6 @@ import {
 import { useEffect, useState } from "react";
 import {
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,6 +16,7 @@ import {
   RefreshControl,
   Animated
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { auth, db } from "../services/firebase";
 

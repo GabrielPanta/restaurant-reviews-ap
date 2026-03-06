@@ -7,7 +7,8 @@ import {
   View,
   Animated,
   Dimensions,
-  TouchableOpacity
+  TouchableOpacity,
+  TextInput
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
@@ -105,14 +106,18 @@ export default function MapScreen({ navigation }) {
   const flatListRef = useRef(null);
 
   const [region, setRegion] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
   const [places, setPlaces] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   const scrollX = useRef(new Animated.Value(0)).current;
 
-  // Actualiza el mapa cuando se desliza a una nueva tarjeta
+  // Actualiza el mapa cuando se desliza a una nueva tarjeta (solo si el usuario ya interactuó)
   useEffect(() => {
-    if (places.length > 0 && mapRef.current) {
+    if (hasInteracted && places.length > 0 && mapRef.current) {
       const place = places[activeIndex];
       mapRef.current.animateToRegion({
         latitude: place.geometry.location.lat,
@@ -121,7 +126,7 @@ export default function MapScreen({ navigation }) {
         longitudeDelta: 0.005
       }, 500);
     }
-  }, [activeIndex, places]);
+  }, [activeIndex, places, hasInteracted]);
 
   useEffect(() => {
     loadLocation();
@@ -143,20 +148,47 @@ export default function MapScreen({ navigation }) {
     };
 
     setRegion(coords);
+    setUserLocation(coords);
 
     if (mapRef.current) {
       mapRef.current.animateToRegion(coords, 1000);
     }
 
     loadNearbyRestaurants(coords.latitude, coords.longitude);
+
+    // Ver ubicación en tiempo real
+    await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 10,
+      },
+      (newLocation) => {
+        const newCoords = {
+          latitude: newLocation.coords.latitude,
+          longitude: newLocation.coords.longitude,
+        };
+        setUserLocation(prev => ({ ...prev, ...newCoords }));
+      }
+    );
+  };
+
+  const centerOnUser = () => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        ...userLocation,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01
+      }, 1000);
+    }
   };
 
   const loadNearbyRestaurants = async (lat, lng) => {
     try {
+      setSearching(true);
       const url =
         `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
         `?location=${lat},${lng}` +
-        `&radius=1000` +
+        `&radius=1500` +
         `&type=restaurant` +
         `&key=${GOOGLE_API_KEY}`;
 
@@ -166,6 +198,43 @@ export default function MapScreen({ navigation }) {
       setPlaces(json.results || []);
     } catch (e) {
       console.log("Error cargando restaurantes", e);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+
+    try {
+      setSearching(true);
+      const url =
+        `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+        `?query=${encodeURIComponent(searchQuery)}` +
+        `&location=${userLocation?.latitude || region.latitude},${userLocation?.longitude || region.longitude}` +
+        `&radius=2000` +
+        `&key=${GOOGLE_API_KEY}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.results && json.results.length > 0) {
+        setPlaces(json.results);
+        setActiveIndex(0);
+
+        // Mover el mapa al primer resultado
+        const first = json.results[0].geometry.location;
+        mapRef.current.animateToRegion({
+          latitude: first.lat,
+          longitude: first.lng,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01
+        }, 1000);
+      }
+    } catch (e) {
+      console.log("Error en búsqueda", e);
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -177,6 +246,8 @@ export default function MapScreen({ navigation }) {
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
       setActiveIndex(viewableItems[0].index);
+      // Marcamos que el usuario ya está navegando la lista
+      setHasInteracted(true);
     }
   }).current;
 
@@ -185,6 +256,7 @@ export default function MapScreen({ navigation }) {
   }).current;
 
   const onMarkerPress = (index) => {
+    setHasInteracted(true);
     if (flatListRef.current) {
       flatListRef.current.scrollToIndex({ index, animated: true });
     }
@@ -211,23 +283,25 @@ export default function MapScreen({ navigation }) {
         toolbarEnabled={false}
       >
         {/* Marcador de Ubicación del Usuario */}
-        <Marker
-          coordinate={{
-            latitude: region.latitude,
-            longitude: region.longitude
-          }}
-          zIndex={2}
-        >
-          <View style={styles.userMarkerContainer}>
-            <View style={styles.userMarkerPulse} />
-            <View style={styles.userMarkerDot}>
-              <Ionicons name="person" size={10} color="#fff" />
+        {userLocation && (
+          <Marker
+            coordinate={{
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude
+            }}
+            zIndex={2}
+          >
+            <View style={styles.userMarkerContainer}>
+              <View style={styles.userMarkerPulse} />
+              <View style={styles.userMarkerDot}>
+                <Ionicons name="person" size={10} color="#fff" />
+              </View>
+              <View style={styles.userMarkerLabel}>
+                <Text style={styles.userMarkerText}>Aquí estoy</Text>
+              </View>
             </View>
-            <View style={styles.userMarkerLabel}>
-              <Text style={styles.userMarkerText}>Aquí estoy</Text>
-            </View>
-          </View>
-        </Marker>
+          </Marker>
+        )}
         {places.map((place, index) => {
           const isActive = index === activeIndex;
           return (
@@ -254,6 +328,39 @@ export default function MapScreen({ navigation }) {
           );
         })}
       </MapView>
+
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={20} color="#64748b" style={styles.searchIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="¿Qué buscas hoy?"
+            placeholderTextColor="#64748b"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Ionicons name="close-circle" size={20} color="#64748b" />
+            </TouchableOpacity>
+          )}
+        </View>
+        {searching && (
+          <View style={styles.searchLoader}>
+            <ActivityIndicator size="small" color="#22c55e" />
+          </View>
+        )}
+      </View>
+
+      <TouchableOpacity
+        style={styles.locatorButton}
+        onPress={centerOnUser}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="locate" size={24} color="#fff" />
+      </TouchableOpacity>
 
       <Animated.FlatList
         ref={flatListRef}
@@ -328,6 +435,61 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     padding: 8,
     transform: [{ scale: 1.1 }]
+  },
+  searchContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    height: 54,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8
+  },
+  searchIcon: {
+    marginRight: 12
+  },
+  input: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500"
+  },
+  searchLoader: {
+    position: 'absolute',
+    right: 50,
+    top: 17
+  },
+  locatorButton: {
+    position: 'absolute',
+    right: 20,
+    top: 120,
+    width: 50,
+    height: 50,
+    backgroundColor: '#1e293b',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    zIndex: 10
   },
   carousel: {
     position: 'absolute',
