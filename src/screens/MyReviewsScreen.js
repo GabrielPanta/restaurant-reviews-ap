@@ -1,11 +1,14 @@
 import { signOut } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   query,
   where
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { ref, deleteObject } from "firebase/storage";
+import { useEffect, useState, useCallback } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -14,19 +17,24 @@ import {
   View,
   StatusBar,
   RefreshControl,
-  Animated
+  Animated,
+  Image,
+  Alert
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { auth, db } from "../services/firebase";
+import { useFocusEffect } from "@react-navigation/native";
+import { auth, db, storage } from "../services/firebase";
 
 export default function MyReviewsScreen() {
   const [reviews, setReviews] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadMyReviews();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadMyReviews();
+    }, [])
+  );
 
   const loadMyReviews = async () => {
     try {
@@ -70,41 +78,73 @@ export default function MyReviewsScreen() {
     }
   };
 
+  const handleDeleteReview = async (reviewId, imageUrl) => {
+    Alert.alert(
+      "Eliminar Reseña",
+      "¿Estás seguro de que quieres borrar esta opinión? No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Borrar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "reviews", reviewId));
+              if (imageUrl) {
+                try {
+                  const imgRef = ref(storage, imageUrl);
+                  await deleteObject(imgRef);
+                } catch (err) { console.log("Error Storage:", err); }
+              }
+              loadMyReviews();
+            } catch (error) {
+              console.log("Error deleting:", error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const getStats = () => {
     const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     let bestRating = 0;
     let favorite = null;
 
+    let totalRating = 0;
     reviews.forEach(r => {
       counts[r.rating] = (counts[r.rating] || 0) + 1;
+      totalRating += r.rating;
       if (r.rating >= bestRating) {
         bestRating = r.rating;
         favorite = r.name;
       }
     });
 
-    return { counts, favorite };
+    const average = reviews.length > 0 ? (totalRating / reviews.length).toFixed(1) : "0.0";
+    return { counts, favorite, average };
   };
 
-  const AnimatedBar = ({ count, total, label, color }) => {
+  const ModernBar = ({ count, total, label, color }) => {
     const animatedWidth = useState(new Animated.Value(0))[0];
 
     useEffect(() => {
       const percentage = total > 0 ? (count / total) : 0;
-      Animated.timing(animatedWidth, {
+      Animated.spring(animatedWidth, {
         toValue: percentage * 100,
-        duration: 1200,
+        friction: 8,
+        tension: 40,
         useNativeDriver: false,
       }).start();
     }, [count, total]);
 
     return (
-      <View style={styles.barRow}>
-        <Text style={styles.barLabel}>{label}</Text>
-        <View style={styles.barTrack}>
+      <View style={styles.modernBarRow}>
+        <Text style={styles.modernBarLabel}>{label}</Text>
+        <View style={styles.modernBarTrack}>
           <Animated.View
             style={[
-              styles.barFill,
+              styles.modernBarFill,
               {
                 width: animatedWidth.interpolate({
                   inputRange: [0, 100],
@@ -115,7 +155,7 @@ export default function MyReviewsScreen() {
             ]}
           />
         </View>
-        <Text style={styles.barCount}>{count}</Text>
+        <Text style={styles.modernBarCount}>{count}</Text>
       </View>
     );
   };
@@ -154,9 +194,14 @@ export default function MyReviewsScreen() {
       <View style={styles.cardHeader}>
         <View style={styles.titleContainer}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <View style={styles.dateBadge}>
-            <Ionicons name="calendar-outline" size={12} color="#94a3b8" style={{ marginRight: 4 }} />
-            <Text style={styles.date}>{item.date}</Text>
+          <View style={styles.headerActions}>
+            <View style={styles.dateBadge}>
+              <Ionicons name="calendar-outline" size={12} color="#94a3b8" style={{ marginRight: 4 }} />
+              <Text style={styles.date}>{item.date}</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleDeleteReview(item.id, item.imageUrl)} style={styles.deleteBtn}>
+              <Ionicons name="trash-outline" size={18} color="#ef4444" />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -165,10 +210,14 @@ export default function MyReviewsScreen() {
 
       {item.comment ? (
         <View style={styles.commentContainer}>
-          <Ionicons name="chatbubble-ellipses-outline" size={16} color="#64748b" style={styles.commentIcon} />
-          <Text style={styles.comment}>{item.comment}</Text>
+          <Ionicons name="chatbubble-ellipses-outline" size={14} color="#64748b" style={styles.commentIcon} />
+          <Text style={styles.reviewComment}>{item.comment}</Text>
         </View>
       ) : null}
+
+      {item.imageUrl && (
+        <Image source={{ uri: item.imageUrl }} style={styles.reviewImage} resizeMode="cover" />
+      )}
     </View>
   );
 
@@ -211,30 +260,45 @@ export default function MyReviewsScreen() {
             }
             ListHeaderComponent={
               <View style={styles.statsHeader}>
-                <View style={styles.analyticsCard}>
-                  <View style={styles.analyticsHeader}>
+                <View style={styles.premiumDashboard}>
+                  <View style={styles.glassHeader}>
                     <View>
-                      <Text style={styles.analyticsTitle}>Tu Resumen</Text>
-                      <Text style={styles.analyticsSubtitle}>{reviews.length} aportes totales</Text>
+                      <Text style={styles.premiumTitle}>Tu Impacto</Text>
+                      <Text style={styles.premiumSubtitle}>Nivel: {reviews.length >= 10 ? "Experto 🏆" : reviews.length >= 5 ? "Frecuente 🥈" : "Novato 🥉"}</Text>
                     </View>
-                    <View style={styles.averageBadge}>
-                      <Ionicons name="stats-chart" size={18} color="#22c55e" />
+                    <View style={styles.totalBadge}>
+                      <Text style={styles.totalCount}>{reviews.length}</Text>
+                      <Text style={styles.totalLabel}>Reseñas</Text>
                     </View>
                   </View>
 
-                  <View style={styles.chartsContainer}>
-                    <AnimatedBar color="#22c55e" count={getStats().counts[5]} total={reviews.length} label="5★" />
-                    <AnimatedBar color="#84cc16" count={getStats().counts[4]} total={reviews.length} label="4★" />
-                    <AnimatedBar color="#eab308" count={getStats().counts[3]} total={reviews.length} label="3★" />
-                    <AnimatedBar color="#f97316" count={getStats().counts[2]} total={reviews.length} label="2★" />
-                    <AnimatedBar color="#ef4444" count={getStats().counts[1]} total={reviews.length} label="1★" />
+                  <View style={styles.dashboardMiddle}>
+                    <View style={styles.averageCircleContainer}>
+                      <View style={styles.averageCircle}>
+                        <Text style={styles.averageValue}>{getStats().average}</Text>
+                        <Text style={styles.averageLabel}>Promedio</Text>
+                      </View>
+                      <View style={styles.starRing}>
+                        <Ionicons name="star" size={24} color="#f59e0b" />
+                      </View>
+                    </View>
+
+                    <View style={styles.distributionContainer}>
+                      <ModernBar color="#22c55e" count={getStats().counts[5]} total={reviews.length} label="Excelente" />
+                      <ModernBar color="#84cc16" count={getStats().counts[4]} total={reviews.length} label="Muy Bueno" />
+                      <ModernBar color="#eab308" count={getStats().counts[3]} total={reviews.length} label="Regular" />
+                      <ModernBar color="#f97316" count={getStats().counts[2]} total={reviews.length} label="Malo" />
+                      <ModernBar color="#ef4444" count={getStats().counts[1]} total={reviews.length} label="Terrible" />
+                    </View>
                   </View>
 
                   {getStats().favorite && (
-                    <View style={styles.favoriteHighlight}>
-                      <Ionicons name="heart" size={16} color="#ef4444" style={{ marginRight: 8 }} />
-                      <Text style={styles.favoriteText}>
-                        Tu favorito: <Text style={styles.favoriteName}>{getStats().favorite}</Text>
+                    <View style={styles.favoritePill}>
+                      <View style={styles.heartIconCircle}>
+                        <Ionicons name="heart" size={14} color="#fff" />
+                      </View>
+                      <Text style={styles.favoritePillText} numberOfLines={1}>
+                        Tu lugar top: <Text style={styles.favoritePillName}>{getStats().favorite}</Text>
                       </Text>
                     </View>
                   )}
@@ -347,53 +411,167 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center"
   },
-  chartsContainer: {
-    gap: 8
+  statsHeader: {
+    marginBottom: 30,
+    marginTop: 10
   },
-  barRow: {
+  premiumDashboard: {
+    backgroundColor: "rgba(30, 41, 59, 0.4)",
+    borderRadius: 36,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    overflow: 'hidden'
+  },
+  glassHeader: {
     flexDirection: "row",
-    alignItems: "center"
-  },
-  barLabel: {
-    color: "#94a3b8",
-    fontSize: 11,
-    fontWeight: "700",
-    width: 25
-  },
-  barTrack: {
-    flex: 1,
-    height: 8,
-    backgroundColor: "rgba(15, 23, 42, 0.6)",
-    borderRadius: 4,
-    marginHorizontal: 10,
-    overflow: "hidden"
-  },
-  barFill: {
-    height: "100%",
-    borderRadius: 4
-  },
-  barCount: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "600",
-    width: 20,
-    textAlign: "right"
-  },
-  favoriteHighlight: {
-    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.05)"
+    marginBottom: 24
   },
-  favoriteText: {
-    color: "#94a3b8",
-    fontSize: 13
-  },
-  favoriteName: {
+  premiumTitle: {
     color: "#fff",
-    fontWeight: "700"
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 0.5
+  },
+  premiumSubtitle: {
+    color: "#22c55e",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  totalBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)'
+  },
+  totalCount: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800'
+  },
+  totalLabel: {
+    color: '#64748b',
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase'
+  },
+  dashboardMiddle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    gap: 20
+  },
+  averageCircleContainer: {
+    width: 110,
+    height: 110,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  averageCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#22c55e',
+    shadowColor: "#22c55e",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  averageValue: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900'
+  },
+  averageLabel: {
+    color: '#64748b',
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase'
+  },
+  starRing: {
+    position: 'absolute',
+    top: -5,
+    right: 5,
+    backgroundColor: '#1e293b',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#f59e0b'
+  },
+  distributionContainer: {
+    flex: 1,
+    gap: 10
+  },
+  modernBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 14
+  },
+  modernBarLabel: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    width: 60
+  },
+  modernBarTrack: {
+    flex: 1,
+    height: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    borderRadius: 3,
+    marginHorizontal: 8,
+    overflow: 'hidden'
+  },
+  modernBarFill: {
+    height: '100%',
+    borderRadius: 3
+  },
+  modernBarCount: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '800',
+    width: 20,
+    textAlign: 'right'
+  },
+  favoritePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    padding: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.2)'
+  },
+  heartIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  favoritePillText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    flex: 1
+  },
+  favoritePillName: {
+    color: '#fff',
+    fontWeight: '800'
   },
   sectionTitle: {
     color: "#f8fafc",
@@ -473,5 +651,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     lineHeight: 22
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  deleteBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8
   }
 });

@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { auth, db } from "../services/firebase";
 import { signOut } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, limit, orderBy } from "firebase/firestore";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback } from "react";
 
@@ -25,12 +25,16 @@ export default function HomeScreen({ navigation }) {
   const [city, setCity] = useState("Tu ciudad");
   const [places, setPlaces] = useState([]);
   const [search, setSearch] = useState("");
-  const [ranking, setRanking] = useState([]);
+  const [mostVisited, setMostVisited] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [globalDiscoveries, setGlobalDiscoveries] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
       loadLocation();
-      loadRanking();
+      loadMostVisited();
+      loadFavorites();
+      loadGlobalDiscoveries();
     }, [])
   );
 
@@ -68,7 +72,7 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const loadRanking = async () => {
+  const loadMostVisited = async () => {
     try {
       const user = auth.currentUser;
       if (!user) return;
@@ -79,12 +83,10 @@ export default function HomeScreen({ navigation }) {
       );
 
       const snapshot = await getDocs(q);
-
       const map = {};
 
       snapshot.forEach(doc => {
         const r = doc.data();
-
         if (!map[r.placeId]) {
           map[r.placeId] = {
             name: r.name,
@@ -93,28 +95,63 @@ export default function HomeScreen({ navigation }) {
             visits: 0
           };
         }
-
         map[r.placeId].ratings.push(r.rating);
         map[r.placeId].visits += 1;
       });
 
       const rankingData = Object.values(map).map(item => {
-        const avg =
-          item.ratings.reduce((a, b) => a + b, 0) /
-          item.ratings.length;
-
-        return {
-          ...item,
-          avg: avg.toFixed(1)
-        };
+        const avg = item.ratings.reduce((a, b) => a + b, 0) / item.ratings.length;
+        return { ...item, avg: avg.toFixed(1) };
       });
 
-      rankingData.sort((a, b) => b.avg - a.avg);
-
-      setRanking(rankingData);
-
+      rankingData.sort((a, b) => b.visits - a.visits);
+      setMostVisited(rankingData);
     } catch (e) {
       console.log("Error ranking", e);
+    }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const q = query(
+        collection(db, "users", user.uid, "favorites"),
+        orderBy("addedAt", "desc")
+      );
+
+      const snapshot = await getDocs(q);
+      setFavorites(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (e) {
+      console.log("Error loading favorites in Home:", e);
+    }
+  };
+
+  const loadGlobalDiscoveries = async () => {
+    try {
+      const q = query(
+        collection(db, "reviews"),
+        orderBy("createdAt", "desc"),
+        limit(10)
+      );
+      const snapshot = await getDocs(q);
+      const discoveries = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userName: data.userName || "Anónimo",
+          userInitial: data.userName ? data.userName[0].toUpperCase() : "?",
+          placeId: data.placeId,
+          name: data.name,
+          address: data.address,
+          rating: data.rating,
+          createdAt: data.createdAt?.toDate().toISOString()
+        };
+      });
+      setGlobalDiscoveries(discoveries);
+    } catch (e) {
+      console.log("Error loading global discoveries:", e);
     }
   };
 
@@ -179,17 +216,77 @@ export default function HomeScreen({ navigation }) {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
 
-        <View style={styles.rankingSection}>
-          <Text style={styles.sectionTitle}>Tus Favoritos</Text>
+        {globalDiscoveries.length > 0 && (
+          <View style={styles.rankingSection}>
+            <Text style={styles.sectionTitle}>Novedades de la Comunidad 🌍</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rankingScroll}>
+              {globalDiscoveries.map((item, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.discoveryCard}
+                  onPress={() => navigation.navigate("Restaurant", { place: { place_id: item.placeId, name: item.name, vicinity: item.address, rating: item.rating } })}
+                >
+                  <View style={styles.discoveryHeader}>
+                    <View style={styles.discoveryAvatar}>
+                      <Text style={styles.discoveryInitial}>{item.userInitial || "?"}</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.discoveryUser} numberOfLines={1}>{item.userName || "Alguien"}</Text>
+                      <Text style={styles.discoveryAction}>descubrió</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.discoveryPlace} numberOfLines={1}>{item.name}</Text>
+                  <View style={styles.discoveryFooter}>
+                    <View style={styles.discoveryRating}>
+                      <Ionicons name="star" size={12} color="#f59e0b" />
+                      <Text style={styles.discoveryRatingText}>{item.rating}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={12} color="#64748b" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
-          {ranking.length === 0 ? (
+        <View style={styles.rankingSection}>
+          <Text style={styles.sectionTitle}>Tus Favoritos ❤️</Text>
+
+          {favorites.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="restaurant-outline" size={32} color="#334155" />
-              <Text style={styles.empty}>Aún no tienes reseñas</Text>
+              <Ionicons name="heart-outline" size={32} color="#334155" />
+              <Text style={styles.empty}>Guarda tus lugares preferidos</Text>
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rankingScroll}>
-              {ranking.slice(0, 5).map((r, i) => (
+              {favorites.slice(0, 5).map((r, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.rankCard}
+                  onPress={() => navigation.navigate("Restaurant", { place: { place_id: r.placeId, name: r.name, vicinity: r.vicinity, rating: r.rating } })}
+                >
+                  <View style={styles.favBadge}>
+                    <Ionicons name="heart" size={12} color="#fff" />
+                  </View>
+                  <View style={styles.rankContent}>
+                    <Text style={styles.rankName} numberOfLines={1}>{r.name}</Text>
+                    <Text style={styles.rankVisits}>{r.vicinity}</Text>
+                  </View>
+                  <View style={styles.rankScore}>
+                    <Ionicons name="star" size={14} color="#f59e0b" />
+                    <Text style={styles.rankAvg}>{r.rating || "N/A"}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {mostVisited.length > 0 && (
+          <View style={styles.rankingSection}>
+            <Text style={styles.sectionTitle}>Más Visitados 🍴</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rankingScroll}>
+              {mostVisited.slice(0, 5).map((r, i) => (
                 <View key={i} style={styles.rankCard}>
                   <View style={styles.rankBadge}>
                     <Text style={styles.rankBadgeText}>#{i + 1}</Text>
@@ -205,8 +302,8 @@ export default function HomeScreen({ navigation }) {
                 </View>
               ))}
             </ScrollView>
-          )}
-        </View>
+          </View>
+        )}
 
         <View style={styles.listSection}>
           <Text style={styles.sectionTitle}>Cerca de ti</Text>
@@ -342,10 +439,86 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12
   },
+  favBadge: {
+    backgroundColor: "#ef4444",
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 12
+  },
   rankBadgeText: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 12
+    fontSize: 10
+  },
+  discoveryCard: {
+    backgroundColor: "#1e293b",
+    width: 200,
+    borderRadius: 20,
+    padding: 16,
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4
+  },
+  discoveryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  discoveryAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#22c55e",
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  discoveryInitial: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  discoveryUser: {
+    color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "600",
+    width: 110
+  },
+  discoveryAction: {
+    color: "#64748b",
+    fontSize: 10
+  },
+  discoveryPlace: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 10
+  },
+  discoveryFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  discoveryRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8
+  },
+  discoveryRatingText: {
+    color: "#f59e0b",
+    fontSize: 11,
+    fontWeight: "bold",
+    marginLeft: 4
   },
   rankContent: {
     marginBottom: 12

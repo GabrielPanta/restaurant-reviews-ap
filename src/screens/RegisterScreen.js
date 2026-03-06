@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import {
@@ -44,6 +44,9 @@ export default function RegisterScreen({ navigation }) {
       );
 
       const user = userCredential.user;
+
+      // Actualizar el perfil con el nombre
+      await updateProfile(user, { displayName: nombre });
 
       await setDoc(doc(db, "usuarios", user.uid), {
         uid: user.uid,

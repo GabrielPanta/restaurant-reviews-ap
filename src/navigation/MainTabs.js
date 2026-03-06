@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
 import MapScreen from "../screens/MapScreen";
 import MyReviewsScreen from "../screens/MyReviewsScreen";
+import ProfileScreen from "../screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -49,6 +50,17 @@ export default function MainTabs() {
           title: "Reseñas",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="star" size={size} color={color} />
+          )
+        }}
+      />
+
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileScreen}
+        options={{
+          title: "Perfil",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
           )
         }}
       />
