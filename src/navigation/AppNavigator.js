@@ -33,7 +33,7 @@ export default function AppNavigator() {
           <Stack.Screen
             name="Restaurant"
             component={RestaurantScreen}
-            options={{ headerShown: true, title: "Restaurante" }}
+            options={{ headerShown: false }}
           />
           <Stack.Screen name="Map" component={MapScreen} />
           <Stack.Screen name="Home" component={HomeScreen} />

@@ -14,14 +14,19 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    StatusBar,
+    ImageBackground,
+    KeyboardAvoidingView,
+    Platform
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { auth, db } from "../services/firebase";
 
-export default function RestaurantScreen({ route }) {
+export default function RestaurantScreen({ route, navigation }) {
     const { place } = route.params;
 
-    const [rating, setRating] = useState("");
+    const [rating, setRating] = useState(0);
     const [comment, setComment] = useState("");
     const [reviews, setReviews] = useState([]);
     const [avg, setAvg] = useState(0);
@@ -30,47 +35,47 @@ export default function RestaurantScreen({ route }) {
         loadReviews();
     }, []);
 
-   const loadReviews = async () => {
-  try {
-    const q = query(
-      collection(db, "reviews"),
-      where("placeId", "==", place.place_id)
-    );
+    const loadReviews = async () => {
+        try {
+            const q = query(
+                collection(db, "reviews"),
+                where("placeId", "==", place.place_id)
+            );
 
-    const snapshot = await getDocs(q);
+            const snapshot = await getDocs(q);
 
-    const list = snapshot.docs.map(doc => {
-      const data = doc.data();
+            const list = snapshot.docs.map(doc => {
+                const data = doc.data();
 
-      let date = "Sin fecha";
-      if (data.createdAt?.toDate) {
-        date = data.createdAt.toDate().toLocaleDateString();
-      }
+                let date = "Sin fecha";
+                if (data.createdAt?.toDate) {
+                    date = data.createdAt.toDate().toLocaleDateString();
+                }
 
-      return {
-        id: doc.id,
-        ...data,
-        date
-      };
-    });
+                return {
+                    id: doc.id,
+                    ...data,
+                    date
+                };
+            });
 
-    setReviews(list);
+            setReviews(list);
 
-    if (list.length > 0) {
-      const total = list.reduce((sum, r) => sum + r.rating, 0);
-      setAvg((total / list.length).toFixed(1));
-    } else {
-      setAvg(0);
-    }
+            if (list.length > 0) {
+                const total = list.reduce((sum, r) => sum + r.rating, 0);
+                setAvg((total / list.length).toFixed(1));
+            } else {
+                setAvg(0);
+            }
 
-  } catch (error) {
-    console.log("Error cargando reseñas:", error);
-  }
-};
+        } catch (error) {
+            console.log("Error cargando reseñas:", error);
+        }
+    };
 
     const saveReview = async () => {
-        if (!rating) {
-            Alert.alert("Ingresa una puntuación");
+        if (rating === 0) {
+            Alert.alert("Aviso", "Por favor ingresa una puntuación tocando las estrellas.");
             return;
         }
 
@@ -79,13 +84,13 @@ export default function RestaurantScreen({ route }) {
                 placeId: place.place_id,
                 name: place.name,
                 address: place.vicinity,
-                rating: Number(rating),
+                rating,
                 comment,
                 userId: auth.currentUser.uid,
                 createdAt: serverTimestamp()
             });
 
-            setRating("");
+            setRating(0);
             setComment("");
             loadReviews();
 
@@ -94,60 +99,149 @@ export default function RestaurantScreen({ route }) {
         }
     };
 
+    const renderStars = (currentRating) => {
+        return (
+            <View style={styles.starsContainer}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                    <Ionicons
+                        key={star}
+                        name={star <= currentRating ? "star" : "star-outline"}
+                        size={14}
+                        color={star <= currentRating ? "#f59e0b" : "#475569"}
+                    />
+                ))}
+            </View>
+        );
+    };
+
+    const renderInteractiveStars = () => {
+        return (
+            <View style={styles.interactiveStarsContainer}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
+                        <Ionicons
+                            name={star <= rating ? "star" : "star-outline"}
+                            size={40}
+                            color={star <= rating ? "#f59e0b" : "#334155"}
+                            style={{ marginHorizontal: 4 }}
+                        />
+                    </TouchableOpacity>
+                ))}
+            </View>
+        );
+    };
+
     const renderItem = ({ item }) => (
-        <View style={styles.card}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.rating}>⭐ {item.rating}</Text>
-            <Text style={styles.date}>{item.date}</Text>
+        <View style={styles.reviewCard}>
+            <View style={styles.cardHeader}>
+                <View style={styles.titleContainer}>
+                    <Text style={styles.reviewName} numberOfLines={1}>{item.name}</Text>
+                    <View style={styles.dateBadge}>
+                        <Ionicons name="calendar-outline" size={10} color="#94a3b8" style={{ marginRight: 4 }} />
+                        <Text style={styles.reviewDate}>{item.date}</Text>
+                    </View>
+                </View>
+            </View>
+
+            {renderStars(item.rating)}
+
             {item.comment ? (
-                <Text style={styles.comment}>{item.comment}</Text>
+                <View style={styles.commentContainer}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={14} color="#64748b" style={styles.commentIcon} />
+                    <Text style={styles.reviewComment}>{item.comment}</Text>
+                </View>
             ) : null}
-            <Text style={styles.date}>{item.date}</Text>
         </View>
     );
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.name}>{place.name}</Text>
-            <Text style={styles.address}>{place.vicinity}</Text>
-
-            <View style={styles.stats}>
-                <Text style={styles.avg}>Promedio: {avg}</Text>
-                <Text style={styles.count}>{reviews.length} reseñas</Text>
-            </View>
-
-            <Text style={styles.section}>Tu reseña</Text>
-
-            <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={rating}
-                onChangeText={setRating}
-                placeholder="Puntuación 1-5"
-                placeholderTextColor="#888"
-            />
-
-            <TextInput
-                style={[styles.input, { height: 80 }]}
-                multiline
-                value={comment}
-                onChangeText={setComment}
-                placeholder="Comentario"
-                placeholderTextColor="#888"
-            />
-
-            <TouchableOpacity style={styles.button} onPress={saveReview}>
-                <Text style={styles.buttonText}>Guardar</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.section}>Opiniones</Text>
-
+        <KeyboardAvoidingView
+            style={styles.container}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        >
+            <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
             <FlatList
                 data={reviews}
                 keyExtractor={item => item.id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 40 }}
+                ListHeaderComponent={
+                    <>
+                        <View style={styles.headerHero}>
+                            <TouchableOpacity
+                                style={styles.backButton}
+                                onPress={() => navigation.goBack()}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="arrow-back" size={24} color="#fff" />
+                            </TouchableOpacity>
+
+                            <View style={styles.heroContent}>
+                                <Text style={styles.name}>{place.name}</Text>
+                                <View style={styles.addressRow}>
+                                    <Ionicons name="location-outline" size={16} color="#94a3b8" />
+                                    <Text style={styles.address}>{place.vicinity}</Text>
+                                </View>
+
+                                <View style={styles.statsContainer}>
+                                    <View style={styles.statBadge}>
+                                        <Ionicons name="star" size={18} color="#fff" />
+                                        <Text style={styles.avgText}>{avg}</Text>
+                                    </View>
+                                    <View style={styles.reviewsBadge}>
+                                        <Ionicons name="people-outline" size={16} color="#94a3b8" />
+                                        <Text style={styles.countText}>{reviews.length} reseñas locales</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={styles.formContainer}>
+                            <Text style={styles.sectionTitle}>¿Qué te pareció?</Text>
+
+                            {renderInteractiveStars()}
+
+                            <View style={styles.inputWrapper}>
+                                <Ionicons name="create-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    style={styles.input}
+                                    multiline
+                                    value={comment}
+                                    onChangeText={setComment}
+                                    placeholder="Escribe tu opinión sobre la comida o el servicio..."
+                                    placeholderTextColor="#64748b"
+                                    textAlignVertical="top"
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.button, rating === 0 ? styles.buttonDisabled : null]}
+                                onPress={saveReview}
+                                activeOpacity={0.8}
+                                disabled={rating === 0}
+                            >
+                                <Ionicons name="send" size={16} color="#fff" style={{ marginRight: 8 }} />
+                                <Text style={styles.buttonText}>Publicar Reseña</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {reviews.length > 0 && (
+                            <View style={styles.reviewsHeaderSection}>
+                                <Text style={styles.sectionTitle}>Opiniones Recientes</Text>
+                            </View>
+                        )}
+                        {reviews.length === 0 && (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="restaurant-outline" size={40} color="#334155" />
+                                <Text style={styles.emptyText}>Sé el primero en dejar una reseña para este restaurante.</Text>
+                            </View>
+                        )}
+                    </>
+                }
                 renderItem={renderItem}
             />
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -155,65 +249,241 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#0f172a",
-        padding: 16
+    },
+    headerHero: {
+        backgroundColor: "#1e293b",
+        paddingHorizontal: 24,
+        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingBottom: 24,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        borderBottomWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        elevation: 8,
+        marginBottom: 20
+    },
+    backButton: {
+        position: "absolute",
+        top: Platform.OS === 'ios' ? 50 : 30,
+        left: 20,
+        zIndex: 10,
+        backgroundColor: "rgba(255,255,255,0.1)",
+        padding: 8,
+        borderRadius: 20
+    },
+    heroContent: {
+        marginTop: 40
     },
     name: {
-        color: "#fff",
-        fontSize: 20
+        color: "#ffffff",
+        fontSize: 28,
+        fontWeight: "800",
+        marginBottom: 8,
+        letterSpacing: 0.5
+    },
+    addressRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16
     },
     address: {
         color: "#94a3b8",
-        marginBottom: 12
+        fontSize: 14,
+        marginLeft: 6,
+        fontWeight: "500",
+        flex: 1
     },
-    stats: {
+    statsContainer: {
         flexDirection: "row",
-        marginBottom: 16
+        alignItems: "center"
     },
-    avg: {
-        color: "#22c55e",
+    statBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: "#22c55e",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 14,
         marginRight: 12
     },
-    count: {
-        color: "#94a3b8"
+    avgText: {
+        color: "#ffffff",
+        fontWeight: "bold",
+        fontSize: 16,
+        marginLeft: 4
     },
-    section: {
-        color: "#fff",
-        marginBottom: 8,
-        marginTop: 10
+    reviewsBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: "#334155",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 14
+    },
+    countText: {
+        color: "#cbd5e1",
+        fontSize: 13,
+        fontWeight: "600",
+        marginLeft: 6
+    },
+    formContainer: {
+        paddingHorizontal: 24,
+        marginBottom: 24
+    },
+    sectionTitle: {
+        color: "#f8fafc",
+        fontSize: 20,
+        fontWeight: "700",
+        marginBottom: 16,
+        letterSpacing: 0.3
+    },
+    interactiveStarsContainer: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#1e293b",
+        paddingVertical: 20,
+        borderRadius: 20,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)"
+    },
+    inputWrapper: {
+        flexDirection: 'row',
+        backgroundColor: "#1e293b",
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
+        minHeight: 100
+    },
+    inputIcon: {
+        marginTop: 4,
+        marginRight: 10
     },
     input: {
-        backgroundColor: "#1e293b",
-        borderRadius: 10,
-        padding: 10,
+        flex: 1,
         color: "#fff",
-        marginBottom: 10
+        fontSize: 15,
+        lineHeight: 22
     },
     button: {
+        flexDirection: 'row',
         backgroundColor: "#22c55e",
-        padding: 12,
-        borderRadius: 10,
+        padding: 16,
+        borderRadius: 16,
         alignItems: "center",
-        marginBottom: 10
+        justifyContent: "center",
+        shadowColor: "#22c55e",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 6
+    },
+    buttonDisabled: {
+        backgroundColor: "#334155",
+        shadowOpacity: 0
     },
     buttonText: {
-        color: "#fff"
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "700",
+        letterSpacing: 0.5
+    },
+    reviewsHeaderSection: {
+        paddingHorizontal: 24,
+        marginTop: 10
     },
     reviewCard: {
         backgroundColor: "#1e293b",
-        padding: 10,
-        borderRadius: 10,
-        marginBottom: 8
+        borderRadius: 20,
+        padding: 20,
+        marginHorizontal: 24,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.05)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 5
     },
-    reviewRating: {
-        color: "#22c55e",
-        marginBottom: 4
+    cardHeader: {
+        marginBottom: 10
     },
-    reviewText: {
-        color: "#e2e8f0"
+    titleContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
     },
-    date: {
+    reviewName: {
+        color: "#f8fafc",
+        fontSize: 16,
+        fontWeight: "700",
+        flex: 1,
+        marginRight: 10,
+        letterSpacing: 0.2
+    },
+    dateBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: "#334155",
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12
+    },
+    reviewDate: {
+        color: "#94a3b8",
+        fontSize: 11,
+        fontWeight: "600"
+    },
+    starsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        gap: 2
+    },
+    commentContainer: {
+        flexDirection: 'row',
+        backgroundColor: "#0f172a",
+        padding: 12,
+        borderRadius: 12,
+        borderLeftWidth: 3,
+        borderLeftColor: "#22c55e"
+    },
+    commentIcon: {
+        marginRight: 8,
+        marginTop: 2
+    },
+    reviewComment: {
+        color: "#cbd5e1",
+        fontSize: 14,
+        flex: 1,
+        lineHeight: 20
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 30,
+        marginHorizontal: 24,
+        marginTop: 10,
+        backgroundColor: '#1e293b',
+        borderRadius: 20,
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: '#334155'
+    },
+    emptyText: {
         color: "#64748b",
-        marginTop: 6,
-        fontSize: 12
+        marginTop: 12,
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 22
     }
 });

@@ -1,19 +1,21 @@
 import { signOut } from "firebase/auth";
 import {
-    collection,
-    getDocs,
-    query,
-    where
+  collection,
+  getDocs,
+  query,
+  where
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-    FlatList,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  StatusBar
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { auth, db } from "../services/firebase";
 
 export default function MyReviewsScreen() {
@@ -71,41 +73,74 @@ export default function MyReviewsScreen() {
     }
   };
 
+  const renderStars = (rating) => {
+    return (
+      <View style={styles.starsContainer}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Ionicons
+            key={star}
+            name={star <= rating ? "star" : "star-outline"}
+            size={16}
+            color={star <= rating ? "#f59e0b" : "#475569"}
+          />
+        ))}
+        <Text style={styles.ratingNumber}>{rating}</Text>
+      </View>
+    );
+  };
+
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <Text style={styles.name}>{item.name}</Text>
-      <Text style={styles.rating}>⭐ {item.rating}</Text>
-      <Text style={styles.date}>{item.date}</Text>
+      <View style={styles.cardHeader}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+          <View style={styles.dateBadge}>
+            <Ionicons name="calendar-outline" size={12} color="#94a3b8" style={{ marginRight: 4 }} />
+            <Text style={styles.date}>{item.date}</Text>
+          </View>
+        </View>
+      </View>
+
+      {renderStars(item.rating)}
+
       {item.comment ? (
-        <Text style={styles.comment}>{item.comment}</Text>
+        <View style={styles.commentContainer}>
+          <Ionicons name="chatbubble-ellipses-outline" size={16} color="#64748b" style={styles.commentIcon} />
+          <Text style={styles.comment}>{item.comment}</Text>
+        </View>
       ) : null}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
       <View style={styles.container}>
 
         <View style={styles.header}>
-          <Text style={styles.title}>Mis reseñas</Text>
+          <View>
+            <Text style={styles.subtitle}>Tu historial</Text>
+            <Text style={styles.title}>Mis Reseñas</Text>
+          </View>
 
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={handleLogout}
-          >
-            <Text style={styles.logoutText}>Salir</Text>
+          <TouchableOpacity style={styles.logoutIcon} onPress={handleLogout} activeOpacity={0.6}>
+            <Ionicons name="log-out-outline" size={24} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
         {reviews.length === 0 ? (
-          <Text style={styles.empty}>
-            Aún no tienes reseñas
-          </Text>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="document-text-outline" size={48} color="#334155" />
+            <Text style={styles.emptyTitle}>Sin reseñas aún</Text>
+            <Text style={styles.emptyText}>Parece que no has calificado ningún restaurante todavía. ¡Anímate a explorar!</Text>
+          </View>
         ) : (
           <FlatList
             data={reviews}
             keyExtractor={item => item.id}
             renderItem={renderItem}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
           />
         )}
       </View>
@@ -120,53 +155,129 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16
   },
   header: {
+    paddingTop: 30,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12
+    alignItems: "center"
   },
   title: {
-    color: "#fff",
-    fontSize: 22
+    fontSize: 28,
+    color: "#ffffff",
+    fontWeight: "800",
+    letterSpacing: 0.5
   },
-  logoutBtn: {
-    backgroundColor: "#ef4444",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8
+  subtitle: {
+    fontSize: 14,
+    color: "#22c55e",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4
   },
-  logoutText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600"
+  logoutIcon: {
+    padding: 10,
+    backgroundColor: "#1e293b",
+    borderRadius: 12
   },
-  empty: {
-    color: "#94a3b8"
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    marginTop: -50
+  },
+  emptyTitle: {
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 16,
+    marginBottom: 8
+  },
+  emptyText: {
+    color: "#64748b",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22
+  },
+  listContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 10
   },
   card: {
     backgroundColor: "#1e293b",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 5
+  },
+  cardHeader: {
+    marginBottom: 12
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   name: {
-    color: "#fff",
-    fontSize: 16
+    color: "#f8fafc",
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: 10,
+    letterSpacing: 0.2
   },
-  rating: {
-    color: "#22c55e",
-    marginTop: 4
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "#334155",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12
   },
   date: {
-    color: "#64748b",
-    marginTop: 4,
-    fontSize: 12
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "600"
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 2
+  },
+  ratingNumber: {
+    color: "#f8fafc",
+    fontSize: 14,
+    fontWeight: "700",
+    marginLeft: 6
+  },
+  commentContainer: {
+    flexDirection: 'row',
+    backgroundColor: "#0f172a",
+    padding: 12,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#22c55e"
+  },
+  commentIcon: {
+    marginRight: 8,
+    marginTop: 2
   },
   comment: {
-    color: "#e2e8f0",
-    marginTop: 4
+    color: "#cbd5e1",
+    fontSize: 14,
+    flex: 1,
+    lineHeight: 20
   }
 });
