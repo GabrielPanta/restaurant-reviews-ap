@@ -204,12 +204,30 @@ export default function MapScreen({ navigation }) {
         ref={mapRef}
         style={styles.map}
         initialRegion={region}
-        showsUserLocation
+        showsUserLocation={false}
         customMapStyle={darkMapStyle}
         showsMyLocationButton={false}
         showsCompass={false}
         toolbarEnabled={false}
       >
+        {/* Marcador de Ubicación del Usuario */}
+        <Marker
+          coordinate={{
+            latitude: region.latitude,
+            longitude: region.longitude
+          }}
+          zIndex={2}
+        >
+          <View style={styles.userMarkerContainer}>
+            <View style={styles.userMarkerPulse} />
+            <View style={styles.userMarkerDot}>
+              <Ionicons name="person" size={10} color="#fff" />
+            </View>
+            <View style={styles.userMarkerLabel}>
+              <Text style={styles.userMarkerText}>Aquí estoy</Text>
+            </View>
+          </View>
+        </Marker>
         {places.map((place, index) => {
           const isActive = index === activeIndex;
           return (
@@ -367,5 +385,44 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 12,
     marginLeft: 4
+  },
+  userMarkerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userMarkerPulse: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  userMarkerDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0ea5e9',
+    borderWidth: 2,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1
+  },
+  userMarkerLabel: {
+    backgroundColor: '#0ea5e9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginTop: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5
+  },
+  userMarkerText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   }
 });

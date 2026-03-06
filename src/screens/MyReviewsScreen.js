@@ -13,13 +13,16 @@ import {
   Text,
   TouchableOpacity,
   View,
-  StatusBar
+  StatusBar,
+  RefreshControl,
+  Animated
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { auth, db } from "../services/firebase";
 
 export default function MyReviewsScreen() {
   const [reviews, setReviews] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadMyReviews();
@@ -62,7 +65,64 @@ export default function MyReviewsScreen() {
       setReviews(list);
     } catch (e) {
       console.log("Error cargando mis reseñas:", e);
+    } finally {
+      setRefreshing(false);
     }
+  };
+
+  const getStats = () => {
+    const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let bestRating = 0;
+    let favorite = null;
+
+    reviews.forEach(r => {
+      counts[r.rating] = (counts[r.rating] || 0) + 1;
+      if (r.rating >= bestRating) {
+        bestRating = r.rating;
+        favorite = r.name;
+      }
+    });
+
+    return { counts, favorite };
+  };
+
+  const AnimatedBar = ({ count, total, label, color }) => {
+    const animatedWidth = useState(new Animated.Value(0))[0];
+
+    useEffect(() => {
+      const percentage = total > 0 ? (count / total) : 0;
+      Animated.timing(animatedWidth, {
+        toValue: percentage * 100,
+        duration: 1200,
+        useNativeDriver: false,
+      }).start();
+    }, [count, total]);
+
+    return (
+      <View style={styles.barRow}>
+        <Text style={styles.barLabel}>{label}</Text>
+        <View style={styles.barTrack}>
+          <Animated.View
+            style={[
+              styles.barFill,
+              {
+                width: animatedWidth.interpolate({
+                  inputRange: [0, 100],
+                  outputRange: ["0%", "100%"],
+                }),
+                backgroundColor: color,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.barCount}>{count}</Text>
+      </View>
+    );
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadMyReviews();
   };
 
   const handleLogout = async () => {
@@ -141,6 +201,50 @@ export default function MyReviewsScreen() {
             renderItem={renderItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#22c55e"
+                colors={["#22c55e"]}
+              />
+            }
+            ListHeaderComponent={
+              <View style={styles.statsHeader}>
+                <View style={styles.analyticsCard}>
+                  <View style={styles.analyticsHeader}>
+                    <View>
+                      <Text style={styles.analyticsTitle}>Tu Resumen</Text>
+                      <Text style={styles.analyticsSubtitle}>{reviews.length} aportes totales</Text>
+                    </View>
+                    <View style={styles.averageBadge}>
+                      <Ionicons name="stats-chart" size={18} color="#22c55e" />
+                    </View>
+                  </View>
+
+                  <View style={styles.chartsContainer}>
+                    <AnimatedBar color="#22c55e" count={getStats().counts[5]} total={reviews.length} label="5★" />
+                    <AnimatedBar color="#84cc16" count={getStats().counts[4]} total={reviews.length} label="4★" />
+                    <AnimatedBar color="#eab308" count={getStats().counts[3]} total={reviews.length} label="3★" />
+                    <AnimatedBar color="#f97316" count={getStats().counts[2]} total={reviews.length} label="2★" />
+                    <AnimatedBar color="#ef4444" count={getStats().counts[1]} total={reviews.length} label="1★" />
+                  </View>
+
+                  {getStats().favorite && (
+                    <View style={styles.favoriteHighlight}>
+                      <Ionicons name="heart" size={16} color="#ef4444" style={{ marginRight: 8 }} />
+                      <Text style={styles.favoriteText}>
+                        Tu favorito: <Text style={styles.favoriteName}>{getStats().favorite}</Text>
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {reviews.length > 0 && (
+                  <Text style={styles.sectionTitle}>Historial reciente</Text>
+                )}
+              </View>
+            }
           />
         )}
       </View>
@@ -206,19 +310,109 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingHorizontal: 24,
     paddingBottom: 40,
-    paddingTop: 10
+    paddingTop: 0
+  },
+  statsHeader: {
+    marginBottom: 20,
+    marginTop: 10
+  },
+  analyticsCard: {
+    backgroundColor: "rgba(30, 41, 59, 0.7)",
+    borderRadius: 32,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  analyticsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20
+  },
+  analyticsTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "800"
+  },
+  analyticsSubtitle: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "500"
+  },
+  averageBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  chartsContainer: {
+    gap: 8
+  },
+  barRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  barLabel: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    width: 25
+  },
+  barTrack: {
+    flex: 1,
+    height: 8,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    borderRadius: 4,
+    marginHorizontal: 10,
+    overflow: "hidden"
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 4
+  },
+  barCount: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "600",
+    width: 20,
+    textAlign: "right"
+  },
+  favoriteHighlight: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.05)"
+  },
+  favoriteText: {
+    color: "#94a3b8",
+    fontSize: 13
+  },
+  favoriteName: {
+    color: "#fff",
+    fontWeight: "700"
+  },
+  sectionTitle: {
+    color: "#f8fafc",
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 24,
+    letterSpacing: 0.3
   },
   card: {
-    backgroundColor: "#1e293b",
-    borderRadius: 20,
+    backgroundColor: "rgba(30, 41, 59, 0.7)",
+    borderRadius: 28,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255, 255, 255, 0.08)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
-    shadowRadius: 10,
+    shadowRadius: 15,
     elevation: 5
   },
   cardHeader: {
@@ -231,7 +425,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: "#f8fafc",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     flex: 1,
     marginRight: 10,
@@ -240,9 +434,9 @@ const styles = StyleSheet.create({
   dateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: "#334155",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12
   },
   date: {
@@ -264,20 +458,20 @@ const styles = StyleSheet.create({
   },
   commentContainer: {
     flexDirection: 'row',
-    backgroundColor: "#0f172a",
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: "rgba(15, 23, 42, 0.4)",
+    padding: 14,
+    borderRadius: 18,
     borderLeftWidth: 3,
     borderLeftColor: "#22c55e"
   },
   commentIcon: {
-    marginRight: 8,
+    marginRight: 10,
     marginTop: 2
   },
   comment: {
     color: "#cbd5e1",
     fontSize: 14,
     flex: 1,
-    lineHeight: 20
+    lineHeight: 22
   }
 });
